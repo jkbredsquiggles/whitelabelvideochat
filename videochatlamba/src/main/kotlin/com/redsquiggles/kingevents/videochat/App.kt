@@ -11,17 +11,40 @@ import com.redsquiggles.virtualvenue.websocketlambda.APIGatewayBridge
 import com.redsquiggles.virtualvenue.websocketlambda.ApiGatewayWebSocketBridgeServiceImpl
 import com.redsquiggles.virtualvenue.websocketlambda.EventAndContext
 
+// Video chat lambda
 class App : ApiGatewayWebSocketBridgeServiceImpl() {
-    override fun authorize(messageAsJson: JsonObject): Result<Boolean> {
-        TODO("Not yet implemented")
+    lateinit  var clientSerializationUtilities: VideoChatClientSerialization
+    lateinit var messageHelper : APIGatewayMessageUtilities
+    override fun authorize(connectionId: String,messageAsJson: JsonObject): Result<Boolean> {
+        // Need to perform token authorization of the ConnectWith message
+        // otherwise, authorize
+        val message = messageHelper.deserializeBusMessage(connectionId,messageAsJson,
+        clientSerializationUtilities::deserializeBusMessageValue)
+        return if (message.message.content is ConnectWith) {
+            jwtAuthorize(messageAsJson)
+        } else {
+            Result.success(true)
+        }
+
     }
 
     override fun init(eventAndContext: EventAndContext) {
-        TODO("Not yet implemented")
+        this.clientSerializationUtilities = VideoChatClientSerialization(gson)
+        this.messageBus = APIGatewayToVideoChatMessageBus(gson,
+            this.websocketBridge,
+            clientSerializationUtilities,
+        VideoChatServiceSerialization(gson))
+        messageHelper
     }
 
-    override fun processAuthorized(messageAsJson: JsonObject): APIGatewayV2WebSocketResponse {
+    override fun processAuthorized(connectionId: String, messageAsJson: JsonObject): APIGatewayV2WebSocketResponse {
         TODO("Not yet implemented")
+
+        // transform message
+        val message = messageHelper.deserializeBusMessage(connectionId,messageAsJson,
+            clientSerializationUtilities::deserializeBusMessageValue)
+        clientSerializationUtilities.transformToServiceMessage<VideoChatCommand>(message)
+
     }
 
     override fun processWebSocketDisconnect(connectionId: String) {
@@ -123,11 +146,32 @@ interface WebSocketServiceMessageBus {
     fun <T> transformToServiceMessage(busMessage: BusMessageEnvelope) : T
 }
 
+interface APIGatewayMessageUtilities {
+    fun deserializeBusMessage(connectionId: String, parsed: JsonObject, contentTransformer: (String, JsonElement) -> ClientToServerMessageContent) : BusMessageEnvelope
+}
+
+class APIGatewayMessageUtilitiesImpl(val gson: Gson) : APIGatewayMessageUtilities {
+    // API Gateway specific parsing function that will be common to most API applications
+    override fun deserializeBusMessage(connectionId: String, parsed: JsonObject, contentTransformer: (String, JsonElement) -> ClientToServerMessageContent) : BusMessageEnvelope {
+        val type = gson.fromJson(parsed.get("type"), String::class.java)
+        val messageId = gson.fromJson(parsed.get("messageId"), String::class.java)
+        val inReplyTo = parsed.get("inReplyTo")?.let {
+            gson.fromJson(it, String::class.java)
+        }
+        //val message = gson.fromJson(this, BusMessage::class.javaObjectType)
+        val value = parsed.get("value")
+        val messageContent = contentTransformer(type,value)
+        val busMessage = BusMessage(messageId,inReplyTo,type,messageContent)
+
+        return BusMessageEnvelope(connectionId,busMessage)
+    }
+}
+
 // Each application implements its own implementation for transforming BusMessageEnevelop content to
 // the messages required by the service
-// Each application implemnts its own method for processing inbound methods - i.e. calling the appropriate service
+// Each application implements its own method for processing inbound methods - i.e. calling the appropriate service
 abstract class ApiServiceMessageBus(val gson: Gson, val apiGatewayBridge: APIGatewayBridge,
-                                    val clientSerializationUtitlies : ClientToBusGsonSerialization,
+                                    val clientSerializationUtilities : ClientToBusGsonSerialization,
                                     val serviceSerializationUtilities: ServiceToBusGsonSerialization
 ) : MessageBus,WebSocketServiceMessageBus {
 
@@ -141,7 +185,7 @@ abstract class ApiServiceMessageBus(val gson: Gson, val apiGatewayBridge: APIGat
         }
         //val message = gson.fromJson(this, BusMessage::class.javaObjectType)
         val value = parsed.get("value")
-        val messageContent = clientSerializationUtitlies.deserializeBusMessageValue(type,value)
+        val messageContent = clientSerializationUtilities.deserializeBusMessageValue(type,value)
         val busMessage = BusMessage(messageId,inReplyTo,type,messageContent)
 
         return BusMessageEnvelope(connectionId,busMessage)
@@ -207,13 +251,16 @@ public class VideoChatClientSerialization(val gson: Gson) : ClientToBusGsonSeria
     }
 
     override fun <T> transformToServiceMessage(busMessage: BusMessageEnvelope): T{
-        TODO("Need service defined in order to transform to a service command")
+        TODO("Need service defined in order to transform to a service command. Will need tor create" +
+                "Context and Command")
         return when (busMessage.message.content) {
             is ConnectWith -> busMessage.message.content as T
             else -> throw IllegalArgumentException("${busMessage.message.content::class.simpleName} not supported")
         }
 
     }
+
+
 
 }
 
@@ -228,15 +275,15 @@ public class VideoChatServiceSerialization(val gson: Gson) : ServiceToBusGsonSer
 
 public class APIGatewayToVideoChatMessageBus(gson: Gson,
                                              apiGatewayBridge: APIGatewayBridge,
-                                             clientSerializationUtitlies: ClientToBusGsonSerialization,
+                                             clientSerializationUtilities: ClientToBusGsonSerialization,
                                              serviceSerializationUtilities: ServiceToBusGsonSerialization) :
-    ApiServiceMessageBus(gson,apiGatewayBridge,clientSerializationUtitlies,serviceSerializationUtilities ) {
+    ApiServiceMessageBus(gson,apiGatewayBridge,clientSerializationUtilities,serviceSerializationUtilities ) {
     override fun processInbound(command: ClientToServerMessageEnvelope): com.redsquiggles.communications.bus.Result<Response> {
         TODO("Not yet implemented")
     }
 
     override fun <T> transformToServiceMessage(busMessage: BusMessageEnvelope): T {
-        return clientSerializationUtitlies.transformToServiceMessage(busMessage)
+        return clientSerializationUtilities.transformToServiceMessage(busMessage)
     }
 
 
