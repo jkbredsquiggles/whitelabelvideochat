@@ -22,6 +22,7 @@
         <awslambdaevents.version>3.1.0</awslambdaevents.version>
         <virtualvenueservices.version>2.0.0-SNAPSHOT</virtualvenueservices.version>
         <redsquiggles.utilitieslibrary.version>1.0.0-SNAPSHOT</redsquiggles.utilitieslibrary.version>
+        <redsquiggles.videochatlibrary.version>1.0.0-SNAPSHOT</redsquiggles.videochatlibrary.version>
 
     </properties>
 
@@ -30,6 +31,15 @@
         <dependency>
             <groupId>com.redsquiggles.virtualvenue</groupId>
             <artifactId>serviceslibrary</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.redsquiggles</groupId>
+            <artifactId>utilitieslibrary</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.redsquiggles</groupId>
+            <artifactId>videochatlibrary</artifactId>
         </dependency>
 
         <dependency>
@@ -68,9 +78,15 @@
                 <version>${virtualvenueservices.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.redsquiggles.virtualvenue</groupId>
-                <artifactId>chatlibrary</artifactId>
-                <version>${virtualvenuechat.version}</version>
+                <groupId>com.redsquiggles</groupId>
+                <artifactId>videochatlibrary</artifactId>
+                <version>${redsquiggles.videochatlibrary.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.redsquiggles</groupId>
+                <artifactId>utilitieslibrary</artifactId>
+                <version>${redsquiggles.utilitieslibrary.version}</version>
             </dependency>
 
 
