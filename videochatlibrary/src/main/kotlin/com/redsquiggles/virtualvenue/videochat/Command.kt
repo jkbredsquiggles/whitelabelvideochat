@@ -6,5 +6,7 @@ interface ServiceMessage {
     val context: Context
 }
 
-data class ConnectWith(override val context: Context, val userId: List<String>) : ServiceMessage
+data class User(val id: String, val userName: String)
+
+data class ConnectWith(override val context: Context, val requestedBy : User, val otherParties: List<User>) : ServiceMessage
 
