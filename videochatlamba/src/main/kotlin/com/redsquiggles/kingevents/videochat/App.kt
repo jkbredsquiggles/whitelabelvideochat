@@ -2,6 +2,7 @@ package com.redsquiggles.kingevents.videochat
 
 import com.google.gson.*
 import com.redsquiggles.communications.bus.*
+import com.redsquiggles.communications.bus.ClientToServerMessageContent
 import com.redsquiggles.squiggleprise.logging.EventLevel
 import com.redsquiggles.squiggleprise.logging.InstrumentedEventType
 import com.redsquiggles.squiggleprise.logging.LogEvent
@@ -11,14 +12,13 @@ import com.redsquiggles.virtualvenue.videochat.VideoChatService
 import com.redsquiggles.virtualvenue.videochat.VideoChatServiceImpl
 import com.redsquiggles.virtualvenue.videochat.parseRSAPrivateKey
 import com.redsquiggles.virtualvenue.websocketlambda.*
-import com.redsquiggles.virtualvenue.websocketlambda.BusCommand
 
-// Video chat lambda
+/**
+ * Video chat lambda
+ */
 class App : ApiGatewayWebSocketBridgeServiceImpl() {
     lateinit  var clientSerializationUtilities: VideoChatClientSerialization
     lateinit var messageBus : ApiServiceMessageBus
-    //lateinit var messageHelper : APIGatewayMessageUtilities
-    //lateinit var videoChatService: VideoChatService
     override fun authorize(connectionId: String,messageAsJson: JsonObject): Result<Boolean> {
         // Need to perform token authorization of the ConnectWith message
         // otherwise, authorize
@@ -39,8 +39,8 @@ class App : ApiGatewayWebSocketBridgeServiceImpl() {
         var apiKey = System.getenv("JITSI_API_KEY")
         var appKey = System.getenv("JITSI_APP_KEY")
         var rsaKey = parseRSAPrivateKey(signingKey)
-        val videoChatService = VideoChatServiceImpl(rsaKey,apiKey,appKey,messageBus)
-        val messageBus = APIGatewayToVideoChatMessageBus(clientSerializationUtilities,messageBusBase,videoChatService)
+        val videoChatService = VideoChatServiceImpl(logger,rsaKey,apiKey,appKey,messageBus)
+        messageBus = APIGatewayToVideoChatMessageBus(clientSerializationUtilities,messageBusBase,videoChatService)
     }
 
     override fun processAuthorized(connectionId: String, messageAsJson: JsonObject) {
@@ -82,99 +82,15 @@ class App : ApiGatewayWebSocketBridgeServiceImpl() {
 
 }
 
-// outbound messages - server to client
-
-// These need to be defined in the video chat library or services library
-
-
-
-
-// end of section that should be moved to vidochatlibrary
-
-
 interface VideoChatMessage
 data class User(val id : String, val name: String)
 data class ConnectWith(var requestedBy: User, var otherParticipants: List<User>)  : ClientToServerMessageContent, VideoChatMessage
 
+data class VideoChatDetails(var sessionId: String, var authenticationToken: String, var host: User)
 
-
-
-//// Each application implements its own implementation for transforming BusMessageEnevelop content to
-//// the messages required by the service
-//// Each application implements its own method for processing inbound methods - i.e. calling the appropriate service
-//abstract class ApiServiceMessageBus(val gson: Gson, val apiGatewayBridge: WebSocketGatewayBridge,
-//                                    val clientSerializationUtilities : ClientToBusGsonSerialization,
-//                                    val serviceSerializationUtilities: ServiceToBusGsonSerialization
-//) : MessageBus,WebSocketServiceMessageBus {
-//
-//
-//    // API Gateway specific parsing function that will be common to most API applications
-//    fun deserializeBusMessage(connectionId: String, parsed: JsonObject) : BusMessageEnvelope {
-//        val type = gson.fromJson(parsed.get("type"), String::class.java)
-//        val messageId = gson.fromJson(parsed.get("messageId"), String::class.java)
-//        val inReplyTo = parsed.get("inReplyTo")?.let {
-//            gson.fromJson(it, String::class.java)
-//        }
-//        //val message = gson.fromJson(this, BusMessage::class.javaObjectType)
-//        val value = parsed.get("value")
-//        val messageContent = clientSerializationUtilities.deserializeBusMessageValue(type,value)
-//        val busMessage = BusMessage(messageId,inReplyTo,type,messageContent)
-//
-//        return BusMessageEnvelope(connectionId,busMessage)
-//    }
-//
-//    // General
-//    //abstract fun <T> transformToServiceMessage(busMessage: BusMessageEnvelope) : T
-//
-//    // This would be implemented by the logic in processFrame in the Ktor ChatApplication, except connect and disconnect handling
-//    // would be handled by the bus comment
-//    // This would be implemented by the logic in handleWebSocketMessage in the API Gateway Apps.
-//    //abstract fun processInbound(command: ClientToServerMessageEnvelope) : com.redsquiggles.communications.bus.Result<Response>
-//
-//    override fun processOutbound(command: ServerToClientMessageEnvelope) : com.redsquiggles.communications.bus.Result<Response> {
-//        val serializedMessage = serviceSerializationUtilities.serialize(command)
-//        val errors  = command.destinations.mapNotNull {
-//            apiGatewayBridge.sendMessageToClient(it.connectionId, serializedMessage).let {result ->
-//                if (result.isFailure) {
-//                    null
-//                } else {
-//                    it
-//                }
-//            }
-//        }
-//        return if (errors.count() > 0) {
-//            com.redsquiggles.communications.bus.Result.failure(Error.CommandNotSentToSomeDestinations(errors))
-//        } else {
-//            com.redsquiggles.communications.bus.Result.success(Response.CommandSent)
-//        }
-//
-//    }
-//
-//    override fun processBusCommand(command: BusCommand) : com.redsquiggles.communications.bus.Result<Response> {
-//        when (command) {
-//            is Disconnect -> {
-//                apiGatewayBridge.process(APIGatewayDisconnect(command.connectionId))
-//                return com.redsquiggles.communications.bus.Result.success(Response.CommandSent)
-//            }
-//            else -> throw NotImplementedError("message type not supported ${command::class.simpleName}")
-//        }
-//    }
-//
-//
-//    override fun process(command: Message): com.redsquiggles.communications.bus.Result<Response> {
-//        var transformedCommand  = when (command) {
-//            is ServerToClientMessageEnvelope -> return processOutbound(command)
-//            is BusCommand -> return processBusCommand(command)
-//            is ClientToServerMessageEnvelope -> return processInbound(command)
-//            else -> throw NotImplementedError("message type not supported ${command::class.simpleName}")
-//        }
-//
-//    }
-//
-//}
 
 /**
- * Serialization utility to converted between client message types and the service message bus
+ * Serialization utility to convert between client message types and the service message bus
  */
 public class VideoChatClientSerialization(val gson: Gson) : ClientToBusGsonSerialization {
     override fun deserializeBusMessageValue(type: String, message: JsonElement): ClientToServerMessageContent {
@@ -193,7 +109,7 @@ public class VideoChatClientSerialization(val gson: Gson) : ClientToBusGsonSeria
         val context = Context(busMessage.connectionId,busMessage.message.messageId)
         val content = busMessage.message.content
         return when (content) {
-            is ConnectWith -> com.redsquiggles.virtualvenue.videochat.ConnectWith(context,
+            is ConnectWith -> com.redsquiggles.virtualvenue.videochat.StartVideoChatWith(context,
                 content.requestedBy.toVideoChat(),content.otherParticipants.map { it-> it.toVideoChat()}) as T
             else -> throw IllegalArgumentException("${busMessage.message.content::class.simpleName} not supported")
         }
@@ -246,7 +162,7 @@ public class VideoChatServiceSerialization(val gson: Gson) : ServiceToBusGsonSer
             is BusMessageEnvelope ->
             {
                 when (val serviceCommand = command.message.content) {
-                   is com.redsquiggles.virtualvenue.videochat.ConnectWith-> videoChatService.process(serviceCommand)
+                   is com.redsquiggles.virtualvenue.videochat.StartVideoChatWith-> videoChatService.process(serviceCommand)
                     else -> throw NotImplementedError("ServiceCommand type not supported ${serviceCommand::class.simpleName}")
                }
             }

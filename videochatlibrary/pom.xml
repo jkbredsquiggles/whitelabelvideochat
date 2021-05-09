@@ -16,6 +16,7 @@
         <kotlin.code.style>official</kotlin.code.style>
 
         <redsquiggles.utilitieslibrary.version>1.0.0-SNAPSHOT</redsquiggles.utilitieslibrary.version>
+        <virtualvenueservices.version>2.0.0-SNAPSHOT</virtualvenueservices.version>
         <oauth.jwks.version>0.17.0</oauth.jwks.version>
         <oauth.jwt.version>3.15.0</oauth.jwt.version>
 
@@ -30,6 +31,11 @@
             <groupId>com.redsquiggles</groupId>
             <artifactId>utilitieslibrary</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.redsquiggles.virtualvenue</groupId>
+            <artifactId>serviceslibrary</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.auth0</groupId>
             <artifactId>jwks-rsa</artifactId>
@@ -75,6 +81,12 @@
                 <artifactId>utilitieslibrary</artifactId>
                 <version>${redsquiggles.utilitieslibrary.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.redsquiggles.virtualvenue</groupId>
+                <artifactId>serviceslibrary</artifactId>
+                <version>${virtualvenueservices.version}</version>
+            </dependency>
+
 
             <dependency>
                 <groupId>com.auth0</groupId>
