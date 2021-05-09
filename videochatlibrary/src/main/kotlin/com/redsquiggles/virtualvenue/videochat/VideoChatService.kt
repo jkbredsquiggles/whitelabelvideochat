@@ -314,9 +314,8 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
                         rId,iRTo,dList -> Envelope(rId,iRTo,dList, VideoChatDetails(roomName,createToken(it,roomName),user.id))
                 }
             }
-        }
-
     }
+
 
     // Will need to work out decline logic - given that the session may host many participants,
     // that may take a while to join. It may be that the decline will only mean anything as

@@ -7,10 +7,10 @@ import com.redsquiggles.squiggleprise.logging.EventLevel
 import com.redsquiggles.squiggleprise.logging.InstrumentedEventType
 import com.redsquiggles.squiggleprise.logging.LogEvent
 import com.redsquiggles.utilities.Result
-import com.redsquiggles.virtualvenue.videochat.ServiceMessage
-import com.redsquiggles.virtualvenue.videochat.VideoChatService
-import com.redsquiggles.virtualvenue.videochat.VideoChatServiceImpl
-import com.redsquiggles.virtualvenue.videochat.parseRSAPrivateKey
+import com.redsquiggles.virtualvenue.dynamodb.DynamoDbParameters
+import com.redsquiggles.virtualvenue.videochat.*
+import com.redsquiggles.virtualvenue.videochat.dao.DynamoDbConfig
+import com.redsquiggles.virtualvenue.videochat.dao.DynamoDbDao
 import com.redsquiggles.virtualvenue.websocketlambda.*
 
 /**
@@ -39,7 +39,11 @@ class App : ApiGatewayWebSocketBridgeServiceImpl() {
         var apiKey = System.getenv("JITSI_API_KEY")
         var appKey = System.getenv("JITSI_APP_KEY")
         var rsaKey = parseRSAPrivateKey(signingKey)
-        val videoChatService = VideoChatServiceImpl(logger,rsaKey,apiKey,appKey,messageBus)
+        val chatServicesRegion = System.getenv("AWS_REGION")
+        val dbConfig = DynamoDbConfig(DynamoDbParameters(chatServicesRegion, System.getenv("USER_TABLE_NAME")),50)
+        val dao = DynamoDbDao(dbConfig)
+        val roomNamePrefix = System.getenv("ROOM_NAME_PREFIX")
+        val videoChatService = VideoChatServiceImpl(logger,rsaKey,apiKey,appKey,messageBus,roomNamePrefix,dao)
         messageBus = APIGatewayToVideoChatMessageBus(clientSerializationUtilities,messageBusBase,videoChatService)
     }
 
@@ -83,10 +87,43 @@ class App : ApiGatewayWebSocketBridgeServiceImpl() {
 }
 
 interface VideoChatMessage
-data class User(val id : String, val name: String)
-data class ConnectWith(var requestedBy: User, var otherParticipants: List<User>)  : ClientToServerMessageContent, VideoChatMessage
+data class VideoChatUser(val id: String, val name: String)
+data class ConnectWith(var requestedById: String, var otherParticipantIds: List<String>)  : ClientToServerMessageContent, VideoChatMessage
+data class ConnectUser( val user: VideoChatUser) : ClientToServerMessageContent, VideoChatMessage
 
-data class VideoChatDetails(var sessionId: String, var authenticationToken: String, var host: User)
+/**
+ * Command to process the fact that the user associated with the supplied connection string has disconnected
+ */
+object DisconnectUser : ClientToServerMessageContent, VideoChatMessage
+
+data class VideoChatDetails(var sessionId: String, var authenticationToken: String, var hostId: String) : ServerToClientMessageContent, VideoChatMessage
+data class NewConnection(
+    var user: VideoChatUser
+) : ServerToClientMessageContent, VideoChatMessage
+
+data class UserList(
+    var users: List<VideoChatUser>
+) : ServerToClientMessageContent, VideoChatMessage
+
+/**
+ * Server to client event, notifies that a user has disconnected
+ */
+data class Disconnected(
+    var userId : String
+) : ServerToClientMessageContent, VideoChatMessage
+
+enum class Error {
+    NotAuthenticated,
+    InternalError,
+    BadRequest,
+    NotAuthorized
+}
+
+data class ErrorMessage(
+    var error: Error
+) : ServerToClientMessageContent, VideoChatMessage
+
+
 
 
 /**
@@ -96,21 +133,27 @@ public class VideoChatClientSerialization(val gson: Gson) : ClientToBusGsonSeria
     override fun deserializeBusMessageValue(type: String, message: JsonElement): ClientToServerMessageContent {
     @Suppress("IMPLICIT_CAST_TO_ANY") val rc = when (type) {
                 ConnectWith::class.simpleName -> gson.fromJson(message, ConnectWith::class.java)
+                ConnectUser::class.simpleName -> gson.fromJson(message, ConnectUser::class.java)
+                DisconnectUser::class.simpleName -> gson.fromJson(message, DisconnectUser::class.java)
                 else -> throw IllegalArgumentException("$type not supported")
         }
         return rc
     }
 
-    fun User.toVideoChat() : com.redsquiggles.virtualvenue.videochat.User {
-        return com.redsquiggles.virtualvenue.videochat.User(this.id,this.name)
-    }
+//    fun User.toVideoChat() : com.redsquiggles.virtualvenue.videochat.VideoChatUser {
+//        return com.redsquiggles.virtualvenue.videochat.VideoChatUser(this.id,this.name)
+//    }
 
     override fun <T> transformToServiceMessage(busMessage: BusMessageEnvelope): T{
         val context = Context(busMessage.connectionId,busMessage.message.messageId)
         val content = busMessage.message.content
         return when (content) {
+            is ConnectUser -> com.redsquiggles.virtualvenue.videochat.ConnectUser(context,
+                com.redsquiggles.virtualvenue.videochat.VideoChatUser(content.user.id,content.user.name)
+            ) as T
+            is DisconnectUser -> com.redsquiggles.virtualvenue.videochat.DisconnectUser(context) as T
             is ConnectWith -> com.redsquiggles.virtualvenue.videochat.StartVideoChatWith(context,
-                content.requestedBy.toVideoChat(),content.otherParticipants.map { it-> it.toVideoChat()}) as T
+                content.requestedById,content.otherParticipantIds) as T
             else -> throw IllegalArgumentException("${busMessage.message.content::class.simpleName} not supported")
         }
 
@@ -124,9 +167,28 @@ public class VideoChatClientSerialization(val gson: Gson) : ClientToBusGsonSeria
  * Serialization utilities to convert between service message types and the serialization bus
  */
 public class VideoChatServiceSerialization(val gson: Gson) : ServiceToBusGsonSerialization {
+
+    fun com.redsquiggles.virtualvenue.videochat.Error.toClient() : Error {
+        return when(this) {
+            com.redsquiggles.virtualvenue.videochat.Error.NotAuthenticated -> Error.NotAuthenticated
+            com.redsquiggles.virtualvenue.videochat.Error.InternalError -> Error.InternalError
+            com.redsquiggles.virtualvenue.videochat.Error.BadRequest -> Error.BadRequest
+            com.redsquiggles.virtualvenue.videochat.Error.NotAuthorized -> Error.NotAuthorized
+        }
+    }
     override fun serialize(message: ServerToClientMessageEnvelope): String {
         return when (message) {
-            is Envelope -> gson.toJson(BusMessage(message.messageId,message.inReplyTo,message.content))
+            is Envelope -> {
+                val transformed = when (val content = message.content) {
+                    is com.redsquiggles.virtualvenue.videochat.NewConnection-> NewConnection(VideoChatUser(content.user.id,content.user.name))
+                    is com.redsquiggles.virtualvenue.videochat.UserList-> UserList(content.users.map{it->VideoChatUser(it.id,it.name)})
+                    is com.redsquiggles.virtualvenue.videochat.Disconnected-> Disconnected(content.userId)
+                    is com.redsquiggles.virtualvenue.videochat.VideoChatDetails-> VideoChatDetails(content.sessionId,content.authenticationToken,content.hostId)
+                    is com.redsquiggles.virtualvenue.videochat.ErrorMessage-> ErrorMessage(content.error.toClient())
+                    else -> throw NotImplementedError("${content::class.simpleName} not supported")
+                }
+                gson.toJson(BusMessage(message.messageId,message.inReplyTo,transformed))
+            }
             else -> throw NotImplementedError("${message::class.simpleName} not supported")
         }
     }
@@ -163,6 +225,8 @@ public class VideoChatServiceSerialization(val gson: Gson) : ServiceToBusGsonSer
             {
                 when (val serviceCommand = command.message.content) {
                    is com.redsquiggles.virtualvenue.videochat.StartVideoChatWith-> videoChatService.process(serviceCommand)
+                    is com.redsquiggles.virtualvenue.videochat.ConnectUser-> videoChatService.process(serviceCommand)
+                    is com.redsquiggles.virtualvenue.videochat.DisconnectUser-> videoChatService.process(serviceCommand)
                     else -> throw NotImplementedError("ServiceCommand type not supported ${serviceCommand::class.simpleName}")
                }
             }
