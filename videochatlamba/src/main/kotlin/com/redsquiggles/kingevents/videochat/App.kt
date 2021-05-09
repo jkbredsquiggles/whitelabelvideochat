@@ -12,6 +12,7 @@ import com.redsquiggles.virtualvenue.videochat.*
 import com.redsquiggles.virtualvenue.videochat.dao.DynamoDbConfig
 import com.redsquiggles.virtualvenue.videochat.dao.DynamoDbDao
 import com.redsquiggles.virtualvenue.websocketlambda.*
+import java.util.*
 
 /**
  * Video chat lambda
@@ -75,13 +76,22 @@ class App : ApiGatewayWebSocketBridgeServiceImpl() {
     }
 
     override fun processWebSocketDisconnect(connectionId: String) {
-    // This is what would be done if wiring up the chat server - i.e. send it a message telling it that a client
-        // has disconnected
-        // Video chat server doesn't track client connection state just yet
-        // So we currently do nothing.
-    //        val context = Context(UUID.randomUUID().toString(), connectionId)
-//        val command = DisconnectUser(context)
-//        server.process(command)
+        val serviceMessage = com.redsquiggles.virtualvenue.videochat.DisconnectUser(Context(UUID.randomUUID().toString(),connectionId))
+        val transformedRequest = BusMessage(serviceMessage.context.messageId!!,null,serviceMessage)
+        val envelope = BusMessageEnvelope(connectionId,transformedRequest)
+        messageBus.processInbound(envelope).errorOrNull()?.let {
+            logger.log(
+                LogEvent(
+                    EventLevel.Warning,
+                    it,
+                    InstrumentedEventType.Event,
+                    "Error processing websocket disconnect video chat message",
+                    "WebsocketDsiconnectVideoChatMessageProcessingError",
+                    "ResultError"
+                )
+            )
+        }
+
     }
 
 }
