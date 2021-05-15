@@ -4,11 +4,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.redsquiggles</groupId>
-    <artifactId>videochatlamba</artifactId>
+    <artifactId>videochatlambda</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>com.redsquiggles videochatlamba bridge between the API Web Socket Gateway and the video chat library</name>
+    <name>com.redsquiggles videochatlambda bridge between the API Web Socket Gateway and the video chat library</name>
 
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
