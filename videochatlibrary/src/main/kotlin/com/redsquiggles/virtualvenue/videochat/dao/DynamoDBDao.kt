@@ -13,6 +13,10 @@ package com.redsquiggles.virtualvenue.videochat.dao
  */
 
 
+import com.redsquiggles.squiggleprise.logging.EventLevel
+import com.redsquiggles.squiggleprise.logging.InstrumentedEventType
+import com.redsquiggles.squiggleprise.logging.LogEvent
+import com.redsquiggles.squiggleprise.logging.Logger
 import com.redsquiggles.utilities.paginate
 import com.redsquiggles.virtualvenue.dynamodb.buildDynamoDbClient
 import com.redsquiggles.virtualvenue.videochat.model.User
@@ -68,7 +72,7 @@ fun User.toAttributeValues(): Map<String,AttributeValue> {
         DynamoDbDao.USER_NAME_FIELD to this.name.toAttributeValue(),
         DynamoDbDao.USER_CREATED_FIELD to this.created.toAttributeValue(),
         DynamoDbDao.USER_LAST_CONNECTED_FIELD to this.lastConnected.toAttributeValue(),
-        DynamoDbDao.USER_CONNECTION_ID_FIELD to this.connectionId.toAttributeValue(),
+        DynamoDbDao.USER_CONNECTION_ID_FIELD to this.connectionId.toAttributeValue()
        // DynamoDbDao.USER_LOCATIONS_FIELD to this.locations.toAttributeValue()
     )
 }
@@ -81,7 +85,7 @@ fun UserPaginationKey.toAttributeValue():  Map<String,AttributeValue> {
 }
 
 
-class DynamoDbDao(private val dbConfig: DynamoDbConfig) : Dao {
+class DynamoDbDao(private val dbConfig: DynamoDbConfig, val logger: Logger) : Dao {
 
     companion object {
         const val USER_ID_FIELD = "id"
@@ -99,6 +103,9 @@ class DynamoDbDao(private val dbConfig: DynamoDbConfig) : Dao {
 
         val client = dbConfig.userTable.buildDynamoDbClient()
         val itemValues = user.toAttributeValues()
+
+        logger.log(LogEvent(EventLevel.Info, mapOf("user" to user, "attributes" to itemValues),InstrumentedEventType.Event,
+        "create user","CreateUser","mapOfUserAndAttributes"))
 
         val request = PutItemRequest.builder()
             .tableName(dbConfig.userTable.tableName)

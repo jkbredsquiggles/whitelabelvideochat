@@ -42,10 +42,12 @@ class App : ApiGatewayWebSocketBridgeServiceImpl() {
         var rsaKey = parseRSAPrivateKey(signingKey)
         val chatServicesRegion = System.getenv("AWS_REGION")
         val dbConfig = DynamoDbConfig(DynamoDbParameters(chatServicesRegion, System.getenv("USER_TABLE_NAME")),50)
-        val dao = DynamoDbDao(dbConfig)
+        val dao = DynamoDbDao(dbConfig,logger)
         val roomNamePrefix = System.getenv("ROOM_NAME_PREFIX")
-        val videoChatService = VideoChatServiceImpl(logger,rsaKey,apiKey,appKey,messageBus,roomNamePrefix,dao)
-        messageBus = APIGatewayToVideoChatMessageBus(clientSerializationUtilities,messageBusBase,videoChatService)
+        val bus = APIGatewayToVideoChatMessageBus(clientSerializationUtilities,messageBusBase)
+        val videoChatService = VideoChatServiceImpl(logger,rsaKey,apiKey,appKey,bus,roomNamePrefix,dao)
+        bus.videoChatService = videoChatService
+        messageBus = bus
     }
 
     override fun processAuthorized(connectionId: String, messageAsJson: JsonObject) {
@@ -155,7 +157,7 @@ public class VideoChatClientSerialization(val gson: Gson) : ClientToBusGsonSeria
 //    }
 
     override fun <T> transformToServiceMessage(busMessage: BusMessageEnvelope): T{
-        val context = Context(busMessage.connectionId,busMessage.message.messageId)
+        val context = Context(busMessage.message.messageId,busMessage.connectionId)
         val content = busMessage.message.content
         return when (content) {
             is ConnectUser -> com.redsquiggles.virtualvenue.videochat.ConnectUser(context,
@@ -215,9 +217,12 @@ public class VideoChatServiceSerialization(val gson: Gson) : ServiceToBusGsonSer
 //    ApiServiceMessageBusImpl(gson,apiGatewayBridge,clientSerializationUtilities,serviceSerializationUtilities ) {
 
     public class APIGatewayToVideoChatMessageBus(val clientSerializationUtilities: ClientToBusGsonSerialization,
-                                                 val base: ApiServiceMessageBusImpl,
-                                                 val videoChatService: VideoChatService
+                                                 val base: ApiServiceMessageBusImpl
+
 ) : WebSocketServiceOutboundMessageBus by base, WebSocketServiceCommandBus by base, ApiServiceMessageBus {
+
+    lateinit var videoChatService : VideoChatService
+
     override fun process(command: Message): com.redsquiggles.communications.bus.Result<Response> {
         var transformedCommand  = when (command) {
             is ServerToClientMessageEnvelope -> return base.processOutbound(command)

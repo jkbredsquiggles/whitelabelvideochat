@@ -7,6 +7,7 @@ import com.redsquiggles.virtualvenue.videochat.dao.Dao
 import com.redsquiggles.virtualvenue.videochat.dao.UserExistsException
 import com.redsquiggles.virtualvenue.videochat.model.User
 import com.redsquiggles.virtualvenue.videochat.model.UserPaginationKey
+import com.redsquiggles.virtualvenue.websocketlambda.ApiGatewayWebSocketBridgeServiceImpl
 
 import java.security.interfaces.RSAPrivateKey
 import java.time.Instant
@@ -92,6 +93,8 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
 
 
     fun sendNotificationTo(responseId: String, inResponseTo: String?,recipients: Set<User>,messageGenerator: (String,String?,List<Destination>)-> ServerToClientMessageEnvelope) {
+        logger.log(LogEvent(EventLevel.Info,recipients,InstrumentedEventType.Event,"processing send notification to","sendNotificaitonTo","SetUsers"))
+
         if (recipients.isEmpty()) {
             return
         }
@@ -200,6 +203,8 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
         }
     }
     override fun process(command: ConnectUser) {
+        logger.log(LogEvent(EventLevel.Info,command,InstrumentedEventType.Event,"processing connect user","ConnectUser","ConnectUser"))
+
         // add user to users - top level will create ConnectUser from request.
         // For a lambda, the information need not be provided by the UI, it
         // will be parsed from the jwt token in the request context
@@ -255,9 +260,9 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
         }
 
         // send list of users to newly connected user
-        val allUsers = getAllUsers()
+
         sendNotificationTo(responseId,command.context.messageId,setOf(user)) {
-                rId,iRTo,dList -> Envelope(rId,iRTo,dList, UserList(allUsers.map { VideoChatUser(it.id,it.name) }))
+                rId,iRTo,dList -> Envelope(rId,iRTo,dList, UserList(onlineUsers.map { VideoChatUser(it.id,it.name) }))
         }
 
         command.logEventForCommand("Processed ConnectUser","ProcessedConnectUser",EventLevel.Info)
@@ -265,6 +270,7 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
     }
 
     override fun process(command: DisconnectUser) {
+        logger.log(LogEvent(EventLevel.Info,command,InstrumentedEventType.Event,"processing disconnect user","DisconnectUser","DisconnectUser"))
         // Process disconnect
         val onlineUsers = getActiveUsers()
         val usersToDisconnect = onlineUsers.filter { command.context.connectionId == it.connectionId }
@@ -278,8 +284,11 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
 
     override fun process(command: StartVideoChatWith) {
 
+        logger.log(LogEvent(EventLevel.Info,command,InstrumentedEventType.Event,"processing start chat","StartVideoChatWith","StartVideoChatWith"))
+
         // For now, the room name is hard coded
-        val roomName = roomNamePrefix + "DM"
+        val roomName = roomNamePrefix + "DM" + UUID.randomUUID().toString()
+        val clientRoomName = this.appKey + "/" + roomName
 
         // Get user and invitees
         val user = getAndSyncUser(command.requestedById,command.context.connectionId!!)?.first
@@ -292,7 +301,7 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
         val invitees = command.otherPartyIds.map {
             val invitee = dao.getUser(it)
             it to invitee
-        }
+        }.filter{ it.second?.connectionId != null}
 
         if (invitees.count{it-> it.second != null} == 0) {
             (command to user).logEventForCommand(
@@ -310,8 +319,14 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
             .mapNotNull { it.second }
             .plus(user)
             .forEach {
+                var token = createToken(it, roomName)
+                logger.log(LogEvent(EventLevel.Info,
+                    mapOf("userId" to user.id,"token" to token,"roomName" to roomName),
+                    InstrumentedEventType.Event,"Sending token","SendingToken","mapOfTokenStuff"
+                ))
                 sendNotificationTo(messageId,command.context.messageId, setOf(it)) {
-                        rId,iRTo,dList -> Envelope(rId,iRTo,dList, VideoChatDetails(roomName,createToken(it,roomName),user.id))
+                        rId,iRTo,dList ->
+                           Envelope(rId, iRTo, dList, VideoChatDetails(clientRoomName, token, user.id))
                 }
             }
     }
