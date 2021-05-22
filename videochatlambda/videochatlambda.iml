@@ -28,7 +28,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src/test/kotlin" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
-    <orderEntry type="jdk" jdkName="1.8" jdkType="JavaSDK" />
+    <orderEntry type="jdk" jdkName="azul-11" jdkType="JavaSDK" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="Maven: com.redsquiggles.virtualvenue:serviceslibrary:2.0.0-SNAPSHOT" level="project" />
     <orderEntry type="library" name="Maven: software.amazon.awssdk:dynamodb:2.13.76" level="project" />
