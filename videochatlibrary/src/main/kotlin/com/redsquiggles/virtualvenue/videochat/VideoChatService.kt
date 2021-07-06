@@ -185,22 +185,26 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
     }
 
     /**
+     * get user from DAO and update with current user information
+     */
+    fun getAndSyncUser(user: User) : User? {
+        var currentUser = dao.getUser(user.id) ?: return null
+        currentUser = currentUser.copy(connectionId = user.connectionId, lastConnected = Instant.now(), name = user.name)
+        dao.upsertUser(currentUser)!!
+        return currentUser
+    }
+
+    /**
      * get user from DAO and update with current connection info.
      * If that user's connectionId does not match the supplied.
      * return user and boolean that indicates if the data was already synced
      *
      */
-    fun getAndSyncUser(userId: String, connectionId: String) : Pair<User,Boolean>? {
+    fun getAndSyncUser(userId: String, connectionId: String) : User? {
         var user = dao.getUser(userId) ?: return null
-        return if (user.connectionId != connectionId) {
-            user = user.copy(connectionId = connectionId, lastConnected = Instant.now())
-            dao.upsertUser(user) ?: return null
-            user to false
-        } else {
-            user = user.copy(lastConnected = Instant.now())
-            dao.upsertUser(user)!!
-            user to true
-        }
+        user = user.copy(connectionId = connectionId, lastConnected = Instant.now())
+        dao.upsertUser(user)!!
+        return user
     }
     override fun process(command: ConnectUser) {
         logger.log(LogEvent(EventLevel.Info,command,InstrumentedEventType.Event,"processing connect user","ConnectUser","ConnectUser"))
@@ -210,7 +214,7 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
         // will be parsed from the jwt token in the request context
 
         // Add user. If already present and they match, ensure status is active
-        // If new or was not active, notify others of newly connected user
+        // Notify others of newly connected user
 
         val connectionId = command.context.connectionId!!
         // If already present,
@@ -219,13 +223,7 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
         try {
             user = dao.createUser(user!!)
         } catch (exception : UserExistsException) {
-            val syncResponse = getAndSyncUser(command.user.id,connectionId)
-            if (syncResponse != null) {
-                user = syncResponse.first
-                shouldNotify = !syncResponse.second
-            } else {
-                user = null
-            }
+            user = getAndSyncUser(user!!)
         }
         // If user not found then tell the bus to end the connection
         if (user == null) {
@@ -253,11 +251,11 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
         // Notify all active of newly connected user - serves as confirmation to newly connected user AND announcement
         // to others
         val responseId = UUID.randomUUID().toString()
-        if (shouldNotify) {
+//        if (shouldNotify) {
             sendNotificationTo(responseId,command.context.messageId,onlineUsers) {
                     rId,iRTo,dList -> Envelope(rId,iRTo,dList, NewConnection(VideoChatUser(user.id, user.name)))
             }
-        }
+//        }
 
         // send list of users to newly connected user
 
@@ -291,7 +289,7 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
         val clientRoomName = this.appKey + "/" + roomName
 
         // Get user and invitees
-        val user = getAndSyncUser(command.requestedById,command.context.connectionId!!)?.first
+        val user = getAndSyncUser(command.requestedById,command.context.connectionId!!)
         if (user == null) {
             command.logEventForCommand("User not found","UserNotFound",EventLevel.Warning)
                 .notifyBusOfDisconnect()

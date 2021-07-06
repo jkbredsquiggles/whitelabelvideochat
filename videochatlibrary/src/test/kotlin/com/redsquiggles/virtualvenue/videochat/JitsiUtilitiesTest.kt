@@ -102,6 +102,7 @@ internal class JitsiUtilitiesTest {
 
         }
 
+        println(testPrivateKey)
        // When it is used to create a token with the test private key and the token is then
        // decoded and verified using the corresponding public key
        var token = expected.build().signJitsi(parseRSAPrivateKey(testPrivateKey))
