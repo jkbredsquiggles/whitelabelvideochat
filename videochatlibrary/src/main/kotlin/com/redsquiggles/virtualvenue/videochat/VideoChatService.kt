@@ -15,6 +15,7 @@ import java.util.*
 
 interface VideoChatService {
     fun process(command: ConnectUser)
+    fun process(command: UpdateUser)
     fun process(command: DisconnectUser)
     fun process(command: StartVideoChatWith)
 }
@@ -251,11 +252,9 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
         // Notify all active of newly connected user - serves as confirmation to newly connected user AND announcement
         // to others
         val responseId = UUID.randomUUID().toString()
-//        if (shouldNotify) {
             sendNotificationTo(responseId,command.context.messageId,onlineUsers) {
                     rId,iRTo,dList -> Envelope(rId,iRTo,dList, NewConnection(VideoChatUser(user.id, user.name)))
             }
-//        }
 
         // send list of users to newly connected user
 
@@ -264,6 +263,44 @@ class VideoChatServiceImpl(val logger: Logger, val signingKey : RSAPrivateKey, v
         }
 
         command.logEventForCommand("Processed ConnectUser","ProcessedConnectUser",EventLevel.Info)
+
+    }
+
+    override fun process(command: UpdateUser) {
+        logger.log(LogEvent(EventLevel.Info,command,InstrumentedEventType.Event,"processing update user","ConnectUser","UpdateUser"))
+
+
+        val connectionId = command.context.connectionId!!
+        var currentUser = dao.getUser(command.user.id)
+        if (currentUser == null) {
+            command.logEventForCommand("User not found","UserNotFound",EventLevel.Warning)
+                .notifyBusOfDisconnect()
+            return
+        }
+        if (currentUser.connectionId != connectionId) {
+            command.logEventForCommand("ConnectionId mismatch","ConnectionIdMismatch",EventLevel.Warning)
+                .notifyBusOfDisconnect()
+            return
+        }
+
+        var areKeyFieldsTheSame =
+                currentUser.name == command.user.name
+        currentUser = currentUser.copy( name = command.user.name, lastConnected = Instant.now())
+
+        if (!areKeyFieldsTheSame) {
+            dao.upsertUser(currentUser)!!
+            val onlineUsers = getActiveUsers().toSet()
+
+            // Notify all active of newly updated user - serves as confirmation to newly connected user AND announcement
+            // to others
+            val responseId = UUID.randomUUID().toString()
+            sendNotificationTo(responseId,command.context.messageId,onlineUsers) {
+                    rId,iRTo,dList -> Envelope(rId,iRTo,dList, NewConnection(VideoChatUser(currentUser.id,currentUser.name)))
+            }
+        }
+
+        command.logEventForCommand("Processed UpdateUser","ProcessedUpdateUser",EventLevel.Info)
+
 
     }
 

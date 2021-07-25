@@ -5,7 +5,7 @@
 
     <groupId>com.redsquiggles</groupId>
     <artifactId>videochatlambda</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.3-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>com.redsquiggles videochatlambda bridge between the API Web Socket Gateway and the video chat library</name>
@@ -22,7 +22,7 @@
         <awslambdaevents.version>3.1.0</awslambdaevents.version>
         <virtualvenueservices.version>2.0.0-SNAPSHOT</virtualvenueservices.version>
         <redsquiggles.utilitieslibrary.version>1.0.0-SNAPSHOT</redsquiggles.utilitieslibrary.version>
-        <redsquiggles.videochatlibrary.version>1.0.2-SNAPSHOT</redsquiggles.videochatlibrary.version>
+        <redsquiggles.videochatlibrary.version>1.0.3-SNAPSHOT</redsquiggles.videochatlibrary.version>
 
     </properties>
 

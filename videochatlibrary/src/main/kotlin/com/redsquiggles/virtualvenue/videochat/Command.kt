@@ -15,6 +15,13 @@ data class VideoChatUser(val id: String, val name: String)
  */
 data class ConnectUser(override val context: Context, val user : VideoChatUser) : ServiceMessage
 
+
+/**
+ * Update information for the specified existing + connected user
+ */
+data class UpdateUser(override val context: Context, val user : VideoChatUser) : ServiceMessage
+
+
 /**
  * Command to process the fact that the user associated with the supplied connection string has disconnected
  */

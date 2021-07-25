@@ -102,6 +102,7 @@ interface VideoChatMessage
 data class VideoChatUser(val id: String, val name: String)
 data class ConnectWith(var requestedById: String, var otherParticipantIds: List<String>)  : ClientToServerMessageContent, VideoChatMessage
 data class ConnectUser( val user: VideoChatUser) : ClientToServerMessageContent, VideoChatMessage
+data class UpdateUser( val user: VideoChatUser) : ClientToServerMessageContent, VideoChatMessage
 
 /**
  * Command to process the fact that the user associated with the supplied connection string has disconnected
@@ -146,6 +147,7 @@ public class VideoChatClientSerialization(val gson: Gson) : ClientToBusGsonSeria
     @Suppress("IMPLICIT_CAST_TO_ANY") val rc = when (type) {
                 ConnectWith::class.simpleName -> gson.fromJson(message, ConnectWith::class.java)
                 ConnectUser::class.simpleName -> gson.fromJson(message, ConnectUser::class.java)
+                UpdateUser::class.simpleName -> gson.fromJson(message, UpdateUser::class.java)
                 DisconnectUser::class.simpleName -> gson.fromJson(message, DisconnectUser::class.java)
                 else -> throw IllegalArgumentException("$type not supported")
         }
@@ -161,6 +163,9 @@ public class VideoChatClientSerialization(val gson: Gson) : ClientToBusGsonSeria
         val content = busMessage.message.content
         return when (content) {
             is ConnectUser -> com.redsquiggles.virtualvenue.videochat.ConnectUser(context,
+                com.redsquiggles.virtualvenue.videochat.VideoChatUser(content.user.id,content.user.name)
+            ) as T
+            is UpdateUser -> com.redsquiggles.virtualvenue.videochat.UpdateUser(context,
                 com.redsquiggles.virtualvenue.videochat.VideoChatUser(content.user.id,content.user.name)
             ) as T
             is DisconnectUser -> com.redsquiggles.virtualvenue.videochat.DisconnectUser(context) as T
@@ -241,6 +246,7 @@ public class VideoChatServiceSerialization(val gson: Gson) : ServiceToBusGsonSer
                 when (val serviceCommand = command.message.content) {
                    is com.redsquiggles.virtualvenue.videochat.StartVideoChatWith-> videoChatService.process(serviceCommand)
                     is com.redsquiggles.virtualvenue.videochat.ConnectUser-> videoChatService.process(serviceCommand)
+                    is com.redsquiggles.virtualvenue.videochat.UpdateUser-> videoChatService.process(serviceCommand)
                     is com.redsquiggles.virtualvenue.videochat.DisconnectUser-> videoChatService.process(serviceCommand)
                     else -> throw NotImplementedError("ServiceCommand type not supported ${serviceCommand::class.simpleName}")
                }
