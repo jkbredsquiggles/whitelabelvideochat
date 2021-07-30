@@ -17,7 +17,27 @@ interface VideoChatService {
     fun process(command: ConnectUser)
     fun process(command: UpdateUser)
     fun process(command: DisconnectUser)
+
+    /**
+     * Create a random chat room.
+     * For host and each guest, create a token so that the user can enter the room.
+     * Send the tokens to host and each guest.
+     */
     fun process(command: StartVideoChatWith)
+
+    // TODO add events and state
+    // connect - register with server (or just connect, if already registered)
+    // accept chat invite - send message to host (and other guests?)
+    // decline chat invite - send message to host (and other guests?)
+    // enter chat - can this serve for both accept and enter chat?
+    // leave chat - send message to host (and other guests?)
+    // disconnect - still registered, but idle
+    //
+    // states
+    // - available
+    // - initiating (either sent out invite and haven't entered, or being invited)
+    // - busy - in chat - do we track which chat? Probably useful for socializing
+    // - idle - disconnected (or inactive for x?)
 }
 
 
